@@ -8,6 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from app.review_explorer import render_review_explorer
 from src.analysis.pain_points import pain_point_columns
 from src.data.reviews import load_reviews
 from src.pipeline import analyze_dataframe
@@ -28,6 +29,18 @@ def load_analyzed_data(path: str) -> pd.DataFrame:
 
 def format_percent(value: float, total: int) -> str:
     return f"{value / total * 100:.1f}%" if total else "0.0%"
+
+
+def render_review_detail(review: pd.Series) -> None:
+    st.write(review["content"])
+    cols = st.columns(6)
+    cols[0].metric("Rating", f"{review['score']} / 5")
+    cols[1].metric("Sentiment", str(review["sentiment_label"]).title())
+    cols[2].metric("Sentiment score", f"{review['sentiment_score']:.3f}")
+    cols[3].metric("Segment", str(review["user_segment"]).replace("_", " ").title())
+    cols[4].metric("Helpful", int(review["thumbsUpCount"]))
+    cols[5].metric("App version", str(review["appVersion"]) if pd.notna(review["appVersion"]) else "Unknown")
+    st.caption(f"Review date: {review['at']}")
 
 
 try:
@@ -146,3 +159,5 @@ review_view = review_view.rename(columns={"at": "Date", "score": "Rating", "sent
 st.dataframe(review_view, use_container_width=True, hide_index=True)
 
 st.caption(f"Showing {count:,} of {len(df):,} analyzed reviews. Derived sentiment, pain points, and segments are analytical heuristics.")
+
+render_review_explorer(filtered, PAIN_POINTS, detail_renderer=render_review_detail)
