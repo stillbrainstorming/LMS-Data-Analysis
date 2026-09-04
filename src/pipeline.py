@@ -13,17 +13,16 @@ from src.analysis.aggregates import (
     sentiment_vs_rating,
     summary_metrics,
 )
+from src.analysis.config import AnalysisConfig, DEFAULT_CONFIG
 from src.analysis.pain_points import add_pain_points
 from src.analysis.sentiment import add_sentiment
 from src.data.reviews import load_reviews
 from src.models.segmentation import add_user_segments
 
 
-def run_analysis(path: str | Path) -> dict[str, object]:
+def run_analysis(path: str | Path, config: AnalysisConfig = DEFAULT_CONFIG) -> dict[str, object]:
     reviews_df = load_reviews(path)
-    analyzed = add_sentiment(reviews_df)
-    analyzed = add_pain_points(analyzed)
-    analyzed = add_user_segments(analyzed)
+    analyzed = analyze_dataframe(reviews_df, config=config)
     return {
         "data": analyzed,
         "summary": summary_metrics(analyzed),
@@ -38,7 +37,7 @@ def run_analysis(path: str | Path) -> dict[str, object]:
     }
 
 
-def analyze_dataframe(df: pd.DataFrame) -> pd.DataFrame:
-    analyzed = add_sentiment(df)
+def analyze_dataframe(df: pd.DataFrame, config: AnalysisConfig = DEFAULT_CONFIG) -> pd.DataFrame:
+    analyzed = add_sentiment(df, config=config)
     analyzed = add_pain_points(analyzed)
-    return add_user_segments(analyzed)
+    return add_user_segments(analyzed, config=config)
