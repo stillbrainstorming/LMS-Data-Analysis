@@ -17,6 +17,7 @@ from src.analysis.config import AnalysisConfig, DEFAULT_CONFIG
 from src.analysis.pain_points import add_pain_points
 from src.analysis.sentiment import add_sentiment
 from src.data.reviews import load_reviews
+from src.data.schema import validate_derived_schema
 from src.models.segmentation import add_user_segments
 
 
@@ -40,4 +41,6 @@ def run_analysis(path: str | Path, config: AnalysisConfig = DEFAULT_CONFIG) -> d
 def analyze_dataframe(df: pd.DataFrame, config: AnalysisConfig = DEFAULT_CONFIG) -> pd.DataFrame:
     analyzed = add_sentiment(df, config=config)
     analyzed = add_pain_points(analyzed)
-    return add_user_segments(analyzed, config=config)
+    analyzed = add_user_segments(analyzed, config=config)
+    validate_derived_schema(analyzed)
+    return analyzed

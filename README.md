@@ -7,12 +7,9 @@ Reusable Python analysis layer and Streamlit product analytics application for L
 ```text
 LMS-Data-Analysis/
 ├── app/
-├── scripts/
-│   └── refresh_data.py
 ├── src/
 │   ├── data/
-│   │   ├── ingestion.py
-│   │   ├── manifest.py
+│   │   ├── schema.py
 │   │   └── reviews.py
 │   ├── analysis/
 │   │   ├── config.py
@@ -21,9 +18,6 @@ LMS-Data-Analysis/
 │   ├── models/
 │   └── utils/
 ├── data/
-│   ├── lms_reviews_segmented.csv
-│   ├── dataset_metadata.json
-│   └── snapshots/
 ├── tests/
 ├── notebooks/
 ├── requirements.txt
@@ -31,11 +25,11 @@ LMS-Data-Analysis/
 └── .gitignore
 ```
 
-The committed dataset in `data/lms_reviews_segmented.csv` is the last known-good application snapshot. Refreshing data is an explicit ingestion operation and never runs during a dashboard page load.
+The committed dataset is retained in `data/lms_reviews_segmented.csv` as the current analysis snapshot. The source reviews in that file remain unchanged.
 
 ## Application
 
-The Streamlit application is `app/main.py`. It loads the committed snapshot, applies the reusable analytical pipeline, and provides dashboard filters plus the review explorer. Dataset freshness metadata is shown when available.
+The Streamlit application is `app/main.py`. It loads the committed snapshot, applies the reusable analytical pipeline, and provides dashboard filters plus the review explorer.
 
 Run locally:
 
@@ -43,48 +37,44 @@ Run locally:
 streamlit run app/main.py
 ```
 
-## Data pipeline
+## Data contract
 
-The reusable ingestion layer is in `src/data/ingestion.py`. It supports configurable Google Play app identifier, language, country, and review count, validates the fetched source fields, cleans the reviews, runs the analytical transformations, and only then replaces the active dataset.
+`src/data/schema.py` is the single source of truth for the review data contract.
 
-Use the controlled refresh command from the repository root:
+### Source fields
 
-```bash
-python scripts/refresh_data.py
-```
+Stable source columns are:
 
-Optional configuration:
+- `reviewId` — required stable review identifier
+- `userName` — optional source field
+- `content` — required review text
+- `score` — required 1–5 rating
+- `thumbsUpCount` — optional helpful-vote count
+- `at` — required review timestamp
+- `appVersion` — optional app version
 
-```bash
-python scripts/refresh_data.py --app-id com.application.zomato --lang en --country in --count 2000
-```
+### Derived fields
 
-A successful refresh:
+The analytical pipeline adds `review_length`, `sentiment_score`, `sentiment_label`, the six pain-point flags, `user_segment`, and `is_complaint`. Source and derived columns are kept separate so downstream consumers have an explicit contract.
 
-1. Fetches reviews from Google Play through `google-play-scraper`.
-2. Validates required identifiers, scores, timestamps, and source columns.
-3. Cleans and analyzes the complete fetched dataset.
-4. Writes a timestamped snapshot under `data/snapshots/`.
-5. Atomically replaces `data/lms_reviews_segmented.csv` with the validated analyzed dataset.
-6. Records retrieval time, source configuration, row count, and coverage period in `data/dataset_metadata.json`.
+Optional source fields are normalized to safe defaults. Unrecoverable records (missing identifier/text/timestamp, invalid rating, or equivalent corrupt required values) are excluded rather than crashing the application. Duplicate `reviewId` values are resolved deterministically by retaining the latest timestamp, with stable identifier ordering applied afterward.
 
-If fetching or validation fails before the replacement step, the existing active dataset remains untouched. This gives the deployed application a last-known-good fallback without scraping on user requests.
-
-Snapshots are intentionally created by the refresh workflow rather than committed in advance with fabricated timestamps. The repository therefore remains reproducible while each real refresh produces a dated artifact.
+The resulting dataset remains CSV-based for the first deployable version; no database is required until scale or product requirements justify one.
 
 ## Reusable analysis
 
 The `src` package separates:
 
 - data loading and cleaning
-- review ingestion and validation
-- snapshot and freshness metadata
+- source schema normalization
 - sentiment scoring
 - pain-point tagging
 - user segmentation
 - aggregate metrics
 - end-to-end analysis orchestration
 - explicit analytical configuration
+
+Analytical transformations are deterministic: the same normalized input and configuration produce the same derived output. The pipeline validates the derived schema after transformation so presentation code receives a predictable contract.
 
 The notebook under `notebooks/` is a reference workflow. It is not required to run the application.
 
@@ -98,7 +88,7 @@ Sentiment uses TextBlob polarity. The default labels are:
 - neutral: score from `-0.1` through `0.1`
 - negative: score `< -0.1`
 
-These thresholds are configurable in the application and are preserved as the Phase 1/2 defaults. TextBlob is not a Hindi/Hinglish-aware model and can misclassify mixed-language text, emojis, sarcasm, short reviews, and product-specific language. Sentiment is therefore an inferred analytical field, not ground truth.
+These thresholds are configurable in the application. TextBlob is not a Hindi/Hinglish-aware model and can misclassify mixed-language text, emojis, sarcasm, short reviews, and product-specific language. Sentiment is therefore an inferred analytical field, not ground truth.
 
 ### Pain points
 
@@ -113,19 +103,11 @@ The default heuristic preserves the exploratory analysis rules:
 - `satisfied`: rating ≥ 4
 - `passive`: remaining reviews
 
-These rules are configurable in the application. **Churned is not verified customer churn**; it is a heuristic segment derived from review signals. The same applies to other derived segment labels.
-
-### Source vs derived data
-
-Source/measured fields include review text, star rating, thumbs-up count, review timestamp, and app version where supplied by the source dataset. Derived fields include sentiment score/label, pain-point flags, user segment, complaint flag, and aggregate metrics/charts.
+These rules are configurable in the application. **Churned is not verified customer churn**; it is a heuristic segment derived from review signals.
 
 ### Dataset freshness
 
-The application reports the number of rows, review coverage period, latest source review timestamp, and the UTC timestamp at which the dashboard analysis was generated. When a refresh has been run, it also reports the ingestion retrieval timestamp and snapshot path from `data/dataset_metadata.json`.
-
-## Source and redistribution considerations
-
-The ingestion layer uses the third-party `google-play-scraper` library to retrieve public Google Play review data. Availability, response shape, rate limits, regional behavior, and library compatibility may change over time. Before redistributing refreshed datasets, verify the applicable Google Play terms, the library's own project terms, and any restrictions associated with the source data. The application does not scrape Google Play during normal page loads.
+The application reports dataset row count, review coverage period, latest source review timestamp, and the UTC timestamp at which dashboard analysis was generated. Refreshing data is a separate ingestion concern and is not triggered by page loads.
 
 ## Local setup
 
@@ -155,4 +137,4 @@ jupyter notebook notebooks/LMS_reviews_analysis.ipynb
 
 ## Scope
 
-Phase 5 adds a controlled, reusable, validated refresh pipeline with configurable source parameters, dated snapshots, freshness metadata, deterministic analytical regeneration, and last-known-good dataset behavior. Deployment automation is intentionally excluded; no GitHub Actions workflow is required for this project.
+Phase 6 establishes explicit raw and derived schemas, resilient source normalization, deterministic duplicate handling, derived-schema validation, and a documented CSV storage contract. Deployment automation is intentionally excluded; no GitHub Actions workflow is required for this project.
