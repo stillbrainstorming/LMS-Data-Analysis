@@ -37,6 +37,14 @@ Run locally:
 streamlit run app/main.py
 ```
 
+### Performance and reliability
+
+The dashboard uses Streamlit data caching for the analyzed dataset and reusable chart transformations. The dataset cache includes the source file modification timestamp, so a refreshed CSV invalidates the cached analysis automatically while unchanged data is reused across reruns.
+
+Review exploration is bounded to a fixed page size rather than rendering the full filtered dataset. Filtering and pain-point tag generation are cached, and pagination resets safely when a filter reduces the available page count. Empty result sets return an informational state before downstream rendering.
+
+Dataset loading and analysis are wrapped in a user-facing error boundary with a spinner during the potentially expensive first computation. Missing optional source fields remain covered by the Phase 6 schema normalization contract, and the application does not scrape live data during page loads.
+
 ## Data contract
 
 `src/data/schema.py` is the single source of truth for the review data contract.
@@ -137,4 +145,4 @@ jupyter notebook notebooks/LMS_reviews_analysis.ipynb
 
 ## Scope
 
-Phase 6 establishes explicit raw and derived schemas, resilient source normalization, deterministic duplicate handling, derived-schema validation, and a documented CSV storage contract. Deployment automation is intentionally excluded; no GitHub Actions workflow is required for this project.
+Phase 7 adds cached dataset and analytical transformations, bounded review rendering, resilient pagination and optional-column handling, explicit empty/error/loading states, and deterministic reliability tests. Deployment automation is intentionally excluded; no GitHub Actions workflow is required for this project.

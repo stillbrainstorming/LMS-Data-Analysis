@@ -27,6 +27,65 @@ st.markdown("# LMS Review Intelligence")
 st.caption("Interactive product analytics for customer reviews")
 
 
+@st.cache_data(show_spinner=False)
+def load_analyzed_data(path: str, modified_time_ns: int, analysis_config: AnalysisConfig) -> pd.DataFrame:
+    return analyze_dataframe(load_reviews(path), config=analysis_config)
+
+
+@st.cache_data(show_spinner=False)
+def build_rating_distribution(df: pd.DataFrame) -> pd.Series:
+    return df["score"].value_counts().reindex(range(1, 6), fill_value=0).rename("Reviews")
+
+
+@st.cache_data(show_spinner=False)
+def build_sentiment_distribution(df: pd.DataFrame) -> pd.Series:
+    return df["sentiment_label"].value_counts().reindex(SENTIMENTS, fill_value=0).rename("Reviews")
+
+
+@st.cache_data(show_spinner=False)
+def build_segment_distribution(df: pd.DataFrame) -> pd.Series:
+    return df["user_segment"].value_counts().reindex(SEGMENTS, fill_value=0).rename("Reviews")
+
+
+@st.cache_data(show_spinner=False)
+def build_pain_point_distribution(df: pd.DataFrame, pain_points: tuple[str, ...]) -> pd.Series:
+    result = df[list(pain_points)].sum().sort_values(ascending=True).rename("Reviews")
+    result.index = result.index.str.replace("_", " ").str.title()
+    return result
+
+
+@st.cache_data(show_spinner=False)
+def build_pain_points_by_rating(df: pd.DataFrame, pain_points: tuple[str, ...]) -> pd.DataFrame:
+    result = df.groupby("score")[list(pain_points)].sum().reindex(range(1, 6), fill_value=0)
+    result.columns = result.columns.str.replace("_", " ").str.title()
+    return result
+
+
+@st.cache_data(show_spinner=False)
+def build_sentiment_rating(df: pd.DataFrame) -> pd.DataFrame:
+    return pd.crosstab(df["score"], df["sentiment_label"]).reindex(index=range(1, 6), columns=SENTIMENTS, fill_value=0)
+
+
+@st.cache_data(show_spinner=False)
+def build_cooccurrence(df: pd.DataFrame, pain_points: tuple[str, ...]) -> pd.DataFrame:
+    result = df[list(pain_points)].T.dot(df[list(pain_points)])
+    result.index = result.index.str.replace("_", " ").str.title()
+    result.columns = result.columns.str.replace("_", " ").str.title()
+    return result
+
+
+@st.cache_data(show_spinner=False)
+def build_review_trend(df: pd.DataFrame) -> pd.Series:
+    return (
+        df.assign(review_date=pd.to_datetime(df["at"], errors="coerce"))
+        .dropna(subset=["review_date"])
+        .set_index("review_date")
+        .resample("D")
+        .size()
+        .rename("Reviews")
+    )
+
+
 def render_methodology(config: AnalysisConfig, df: pd.DataFrame) -> None:
     with st.expander("Methodology & analytical quality"):
         st.markdown("### Sentiment")
@@ -90,31 +149,13 @@ with st.sidebar:
     search_filter = st.text_input("Search review text", placeholder="e.g. refund, delivery", key="search_filter")
 
 
-@st.cache_data
-def load_analyzed_data(path: str, analysis_config: AnalysisConfig) -> pd.DataFrame:
-    return analyze_dataframe(load_reviews(path), config=analysis_config)
-
-
-def format_percent(value: float, total: int) -> str:
-    return f"{value / total * 100:.1f}%" if total else "0.0%"
-
-
-def render_review_detail(review: pd.Series) -> None:
-    st.write(review["content"])
-    cols = st.columns(6)
-    cols[0].metric("Rating", f"{review['score']} / 5")
-    cols[1].metric("Sentiment", str(review["sentiment_label"]).title())
-    cols[2].metric("Sentiment score", f"{review['sentiment_score']:.3f}")
-    cols[3].metric("Segment", str(review["user_segment"]).replace("_", " ").title())
-    cols[4].metric("Helpful", int(review["thumbsUpCount"]))
-    cols[5].metric("App version", str(review["appVersion"]) if pd.notna(review["appVersion"]) else "Unknown")
-    st.caption(f"Review date: {review['at']}")
-
-
 try:
-    df = load_analyzed_data(str(DATA_PATH), config)
-except (FileNotFoundError, ValueError, KeyError) as exc:
-    st.error(f"Unable to load the review dataset: {exc}")
+    modified_time_ns = DATA_PATH.stat().st_mtime_ns
+    with st.spinner("Loading and analyzing review data..."):
+        df = load_analyzed_data(str(DATA_PATH), modified_time_ns, config)
+except (FileNotFoundError, OSError, ValueError, KeyError) as exc:
+    st.error(f"Unable to load the review dataset safely: {exc}")
+    st.info("The application uses the committed last-known-good CSV snapshot. Verify that the dataset exists and matches the documented schema.")
     st.stop()
 
 with st.sidebar:
@@ -131,12 +172,15 @@ if sentiment_filter:
 if segment_filter:
     filtered = filtered[filtered["user_segment"].isin(segment_filter)]
 if pain_filter:
-    filtered = filtered[filtered[pain_filter].eq(1).all(axis=1)]
+    available_pain_filter = [column for column in pain_filter if column in filtered.columns]
+    if available_pain_filter:
+        filtered = filtered[filtered[available_pain_filter].eq(1).all(axis=1)]
 if search_filter.strip():
     filtered = filtered[filtered["content"].str.contains(search_filter.strip(), case=False, na=False)]
 if date_filter and len(date_filter) == 2:
     start, end = pd.Timestamp(date_filter[0]), pd.Timestamp(date_filter[1]) + pd.Timedelta(days=1)
-    filtered = filtered[(pd.to_datetime(filtered["at"], errors="coerce") >= start) & (pd.to_datetime(filtered["at"], errors="coerce") < end)]
+    timestamps = pd.to_datetime(filtered["at"], errors="coerce")
+    filtered = filtered[(timestamps >= start) & (timestamps < end)]
 
 render_methodology(config, df)
 
@@ -156,45 +200,37 @@ if filtered.empty:
     st.warning("No reviews match the active filters. Try removing a filter or reset the filters.")
     st.stop()
 
+pain_point_tuple = tuple(PAIN_POINTS)
 left, right = st.columns(2)
 with left:
     st.subheader("Rating distribution")
-    st.bar_chart(filtered["score"].value_counts().reindex(range(1, 6), fill_value=0).rename("Reviews"))
+    st.bar_chart(build_rating_distribution(filtered))
 with right:
     st.subheader("Sentiment distribution")
-    st.bar_chart(filtered["sentiment_label"].value_counts().reindex(SENTIMENTS, fill_value=0).rename("Reviews"))
+    st.bar_chart(build_sentiment_distribution(filtered))
 
 left, right = st.columns(2)
 with left:
     st.subheader("User segments")
-    st.bar_chart(filtered["user_segment"].value_counts().reindex(SEGMENTS, fill_value=0).rename("Reviews"))
+    st.bar_chart(build_segment_distribution(filtered))
 with right:
     st.subheader("Top pain points")
-    pain_chart = filtered[PAIN_POINTS].sum().sort_values(ascending=True).rename("Reviews")
-    pain_chart.index = pain_chart.index.str.replace("_", " ").str.title()
-    st.bar_chart(pain_chart)
+    st.bar_chart(build_pain_point_distribution(filtered, pain_point_tuple))
 
 left, right = st.columns(2)
 with left:
     st.subheader("Pain points by rating")
-    by_rating = filtered.groupby("score")[PAIN_POINTS].sum().reindex(range(1, 6), fill_value=0)
-    by_rating.columns = by_rating.columns.str.replace("_", " ").str.title()
-    st.bar_chart(by_rating)
+    st.bar_chart(build_pain_points_by_rating(filtered, pain_point_tuple))
 with right:
     st.subheader("Sentiment vs rating")
-    sentiment_rating = pd.crosstab(filtered["score"], filtered["sentiment_label"]).reindex(index=range(1, 6), columns=SENTIMENTS, fill_value=0)
-    st.bar_chart(sentiment_rating)
+    st.bar_chart(build_sentiment_rating(filtered))
 
 st.subheader("Pain-point co-occurrence")
-cooccurrence = filtered[PAIN_POINTS].T.dot(filtered[PAIN_POINTS])
-cooccurrence.index = cooccurrence.index.str.replace("_", " ").str.title()
-cooccurrence.columns = cooccurrence.columns.str.replace("_", " ").str.title()
-st.dataframe(cooccurrence, use_container_width=True)
+st.dataframe(build_cooccurrence(filtered, pain_point_tuple), use_container_width=True)
 
 if pd.to_datetime(filtered["at"], errors="coerce").notna().any():
     st.subheader("Review trend")
-    trend = filtered.assign(review_date=pd.to_datetime(filtered["at"], errors="coerce")).dropna(subset=["review_date"]).set_index("review_date").resample("D").size().rename("Reviews")
-    st.line_chart(trend)
+    st.line_chart(build_review_trend(filtered))
 
 st.subheader("Recent reviews")
 review_columns = ["at", "score", "sentiment_label", "user_segment", "content"]
