@@ -7,8 +7,13 @@ Reusable Python analysis layer and Streamlit product analytics application for L
 ```text
 LMS-Data-Analysis/
 ├── app/
+├── scripts/
+│   └── refresh_data.py
 ├── src/
 │   ├── data/
+│   │   ├── ingestion.py
+│   │   ├── manifest.py
+│   │   └── reviews.py
 │   ├── analysis/
 │   │   ├── config.py
 │   │   ├── sentiment.py
@@ -16,6 +21,9 @@ LMS-Data-Analysis/
 │   ├── models/
 │   └── utils/
 ├── data/
+│   ├── lms_reviews_segmented.csv
+│   ├── dataset_metadata.json
+│   └── snapshots/
 ├── tests/
 ├── notebooks/
 ├── requirements.txt
@@ -23,11 +31,11 @@ LMS-Data-Analysis/
 └── .gitignore
 ```
 
-The committed dataset is retained in `data/lms_reviews_segmented.csv` as the current analysis snapshot. The source reviews in that file remain unchanged.
+The committed dataset in `data/lms_reviews_segmented.csv` is the last known-good application snapshot. Refreshing data is an explicit ingestion operation and never runs during a dashboard page load.
 
 ## Application
 
-The Streamlit application is `app/main.py`. It loads the committed snapshot, applies the reusable analytical pipeline, and provides dashboard filters plus the Phase 3 review explorer.
+The Streamlit application is `app/main.py`. It loads the committed snapshot, applies the reusable analytical pipeline, and provides dashboard filters plus the review explorer. Dataset freshness metadata is shown when available.
 
 Run locally:
 
@@ -35,12 +43,42 @@ Run locally:
 streamlit run app/main.py
 ```
 
+## Data pipeline
+
+The reusable ingestion layer is in `src/data/ingestion.py`. It supports configurable Google Play app identifier, language, country, and review count, validates the fetched source fields, cleans the reviews, runs the analytical transformations, and only then replaces the active dataset.
+
+Use the controlled refresh command from the repository root:
+
+```bash
+python scripts/refresh_data.py
+```
+
+Optional configuration:
+
+```bash
+python scripts/refresh_data.py --app-id com.application.zomato --lang en --country in --count 2000
+```
+
+A successful refresh:
+
+1. Fetches reviews from Google Play through `google-play-scraper`.
+2. Validates required identifiers, scores, timestamps, and source columns.
+3. Cleans and analyzes the complete fetched dataset.
+4. Writes a timestamped snapshot under `data/snapshots/`.
+5. Atomically replaces `data/lms_reviews_segmented.csv` with the validated analyzed dataset.
+6. Records retrieval time, source configuration, row count, and coverage period in `data/dataset_metadata.json`.
+
+If fetching or validation fails before the replacement step, the existing active dataset remains untouched. This gives the deployed application a last-known-good fallback without scraping on user requests.
+
+Snapshots are intentionally created by the refresh workflow rather than committed in advance with fabricated timestamps. The repository therefore remains reproducible while each real refresh produces a dated artifact.
+
 ## Reusable analysis
 
 The `src` package separates:
 
 - data loading and cleaning
-- review ingestion
+- review ingestion and validation
+- snapshot and freshness metadata
 - sentiment scoring
 - pain-point tagging
 - user segmentation
@@ -83,7 +121,11 @@ Source/measured fields include review text, star rating, thumbs-up count, review
 
 ### Dataset freshness
 
-The application reports the number of rows, review coverage period, latest source review timestamp, and the UTC timestamp at which the dashboard analysis was generated. The committed CSV is a snapshot; refreshing it is a separate ingestion concern and is not triggered by page loads.
+The application reports the number of rows, review coverage period, latest source review timestamp, and the UTC timestamp at which the dashboard analysis was generated. When a refresh has been run, it also reports the ingestion retrieval timestamp and snapshot path from `data/dataset_metadata.json`.
+
+## Source and redistribution considerations
+
+The ingestion layer uses the third-party `google-play-scraper` library to retrieve public Google Play review data. Availability, response shape, rate limits, regional behavior, and library compatibility may change over time. Before redistributing refreshed datasets, verify the applicable Google Play terms, the library's own project terms, and any restrictions associated with the source data. The application does not scrape Google Play during normal page loads.
 
 ## Local setup
 
@@ -113,4 +155,4 @@ jupyter notebook notebooks/LMS_reviews_analysis.ipynb
 
 ## Scope
 
-Phase 4 makes analytical assumptions explicit, visible, and configurable while documenting source versus derived fields and dataset freshness. Deployment automation is intentionally excluded; no GitHub Actions workflow is required for this project.
+Phase 5 adds a controlled, reusable, validated refresh pipeline with configurable source parameters, dated snapshots, freshness metadata, deterministic analytical regeneration, and last-known-good dataset behavior. Deployment automation is intentionally excluded; no GitHub Actions workflow is required for this project.

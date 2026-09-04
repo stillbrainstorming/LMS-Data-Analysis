@@ -12,10 +12,12 @@ if str(ROOT) not in sys.path:
 from app.review_explorer import render_review_explorer
 from src.analysis.config import AnalysisConfig, DEFAULT_CONFIG
 from src.analysis.pain_points import pain_point_columns
+from src.data.manifest import load_metadata
 from src.data.reviews import load_reviews
 from src.pipeline import analyze_dataframe
 
 DATA_PATH = ROOT / "data" / "lms_reviews_segmented.csv"
+METADATA_PATH = ROOT / "data" / "dataset_metadata.json"
 PAIN_POINTS = pain_point_columns()
 SEGMENTS = ["satisfied", "passive", "at_risk", "churned"]
 SENTIMENTS = ["positive", "neutral", "negative"]
@@ -48,9 +50,15 @@ def render_methodology(config: AnalysisConfig, df: pd.DataFrame) -> None:
         dates = pd.to_datetime(df["at"], errors="coerce").dropna()
         coverage = f"{dates.min():%Y-%m-%d} to {dates.max():%Y-%m-%d}" if not dates.empty else "Unavailable"
         latest = f"{dates.max():%Y-%m-%d %H:%M:%S}" if not dates.empty else "Unavailable"
+        metadata = load_metadata(METADATA_PATH)
         st.write(f"Dataset rows: **{len(df):,}**  ")
         st.write(f"Review coverage: **{coverage}**  ")
         st.write(f"Latest source review timestamp: **{latest}**  ")
+        if metadata:
+            st.write(f"Last ingestion retrieval: **{metadata.get('retrieved_at_utc', 'Unavailable')}**  ")
+            st.write(f"Ingestion snapshot: **{metadata.get('snapshot_path', 'Unavailable')}**  ")
+        else:
+            st.info("No ingestion metadata is available yet. The committed dataset remains the last known-good snapshot.")
         st.write(f"Dashboard analysis generated: **{datetime.now(timezone.utc):%Y-%m-%d %H:%M:%S UTC}**")
 
 
@@ -80,6 +88,7 @@ with st.sidebar:
     segment_filter = st.multiselect("User segment", SEGMENTS, key="segment_filter")
     pain_filter = st.multiselect("Pain point", PAIN_POINTS, key="pain_filter")
     search_filter = st.text_input("Search review text", placeholder="e.g. refund, delivery", key="search_filter")
+
 
 @st.cache_data
 def load_analyzed_data(path: str, analysis_config: AnalysisConfig) -> pd.DataFrame:
