@@ -23,6 +23,25 @@ SEGMENTS = ["satisfied", "passive", "at_risk", "churned"]
 SENTIMENTS = ["positive", "neutral", "negative"]
 
 st.set_page_config(page_title="LMS Review Intelligence", page_icon="📊", layout="wide")
+st.markdown("""
+<style>
+[data-testid="stMetric"] {
+    padding: 1rem 1.1rem;
+    border: 1px solid rgba(128, 128, 128, 0.25);
+    border-radius: 0.75rem;
+}
+[data-testid="stMetricLabel"] {
+    font-size: 0.85rem;
+}
+[data-testid="stMetricValue"] {
+    font-size: 1.8rem;
+}
+.block-container {
+    padding-top: 2rem;
+    padding-bottom: 3rem;
+}
+</style>
+""", unsafe_allow_html=True)
 st.markdown("# LMS Review Intelligence")
 st.caption("Interactive product analytics for customer reviews")
 
@@ -84,6 +103,15 @@ def build_review_trend(df: pd.DataFrame) -> pd.Series:
         .size()
         .rename("Reviews")
     )
+
+
+def format_percent(value: int, total: int) -> str:
+    return f"{value / total:.1%}" if total else "—"
+
+
+def render_review_detail(row: pd.Series) -> None:
+    st.markdown(f"**{row.get('content', 'Review unavailable')}**")
+    st.caption(f"Rating: {row.get('score', '—')} · Sentiment: {str(row.get('sentiment_label', '—')).title()} · Segment: {str(row.get('user_segment', '—')).replace('_', ' ').title()}")
 
 
 def render_methodology(config: AnalysisConfig, df: pd.DataFrame) -> None:
@@ -189,11 +217,13 @@ average_rating = filtered["score"].mean() if count else 0
 negative_share = filtered["sentiment_label"].eq("negative").sum()
 churned_share = filtered["user_segment"].eq("churned").sum()
 
+st.markdown("### Executive snapshot")
+st.caption(f"Metrics below reflect the active filters. {count:,} reviews are currently in scope.")
 m1, m2, m3, m4 = st.columns(4)
-m1.metric("Reviews", f"{count:,}")
-m2.metric("Average rating", f"{average_rating:.2f}/5" if count else "—")
-m3.metric("Negative sentiment", format_percent(negative_share, count))
-m4.metric("Churned heuristic", format_percent(churned_share, count))
+m1.metric("Reviews", f"{count:,}", help="Number of reviews matching the active filters.")
+m2.metric("Average rating", f"{average_rating:.2f}/5" if count else "—", help="Mean star rating across the filtered reviews.")
+m3.metric("Negative sentiment", format_percent(negative_share, count), help="Share of filtered reviews classified as negative by the configured sentiment heuristic.")
+m4.metric("Churned heuristic", format_percent(churned_share, count), help="Share classified as churned by the heuristic; this is not observed customer churn.")
 
 st.divider()
 if filtered.empty:
@@ -201,37 +231,45 @@ if filtered.empty:
     st.stop()
 
 pain_point_tuple = tuple(PAIN_POINTS)
+st.markdown("### Review mix")
+st.caption("How the filtered review population is distributed across ratings, sentiment, and user segments.")
 left, right = st.columns(2)
 with left:
     st.subheader("Rating distribution")
-    st.bar_chart(build_rating_distribution(filtered))
+    st.bar_chart(build_rating_distribution(filtered), y_label="Reviews")
 with right:
     st.subheader("Sentiment distribution")
-    st.bar_chart(build_sentiment_distribution(filtered))
+    st.bar_chart(build_sentiment_distribution(filtered), y_label="Reviews")
 
 left, right = st.columns(2)
 with left:
     st.subheader("User segments")
-    st.bar_chart(build_segment_distribution(filtered))
+    st.bar_chart(build_segment_distribution(filtered), y_label="Reviews")
 with right:
     st.subheader("Top pain points")
-    st.bar_chart(build_pain_point_distribution(filtered, pain_point_tuple))
+    st.bar_chart(build_pain_point_distribution(filtered, pain_point_tuple), y_label="Reviews")
 
+st.markdown("### Drivers and relationships")
+st.caption("Use these views to identify which issues cluster together and how analytical signals vary by rating.")
 left, right = st.columns(2)
 with left:
     st.subheader("Pain points by rating")
-    st.bar_chart(build_pain_points_by_rating(filtered, pain_point_tuple))
+    st.bar_chart(build_pain_points_by_rating(filtered, pain_point_tuple), y_label="Reviews")
 with right:
     st.subheader("Sentiment vs rating")
-    st.bar_chart(build_sentiment_rating(filtered))
+    st.bar_chart(build_sentiment_rating(filtered), y_label="Reviews")
 
 st.subheader("Pain-point co-occurrence")
-st.dataframe(build_cooccurrence(filtered, pain_point_tuple), use_container_width=True)
+st.caption("Counts show how often pairs of pain-point tags appear together in the same filtered reviews. Diagonal values represent individual category counts.")
+st.dataframe(build_cooccurrence(filtered, pain_point_tuple), use_container_width=True, hide_index=False)
 
 if pd.to_datetime(filtered["at"], errors="coerce").notna().any():
     st.subheader("Review trend")
-    st.line_chart(build_review_trend(filtered))
+    st.caption("Daily review volume based on the source review timestamp.")
+    st.line_chart(build_review_trend(filtered), y_label="Reviews")
 
+st.markdown("### Review evidence")
+st.caption("Recent reviews provide qualitative context for the aggregate analytical signals above.")
 st.subheader("Recent reviews")
 review_columns = ["at", "score", "sentiment_label", "user_segment", "content"]
 review_view = filtered.sort_values("at", ascending=False)[review_columns].head(20).copy()
