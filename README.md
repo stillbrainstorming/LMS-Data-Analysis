@@ -21,21 +21,84 @@ LMS-Data-Analysis/
 ├── tests/
 ├── notebooks/
 ├── requirements.txt
+├── requirements-dev.txt
+├── .python-version
 ├── README.md
 └── .gitignore
 ```
 
 The committed dataset is retained in `data/lms_reviews_segmented.csv` as the current analysis snapshot. The source reviews in that file remain unchanged.
 
+## Supported environment
+
+The supported runtime is **Python 3.11.x**. The repository pins this major/minor version in `.python-version` so local development and deployment can use the same interpreter family.
+
+`requirements.txt` contains runtime dependencies required by the Streamlit application. `requirements-dev.txt` extends the runtime environment with pytest and Jupyter for testing and the reference notebook. Keeping these dependencies separate avoids requiring notebook tooling in production.
+
 ## Application
 
-The Streamlit application is `app/main.py`. It loads the committed snapshot, applies the reusable analytical pipeline, and provides dashboard filters plus the review explorer.
+The Streamlit application is `app/main.py`. It loads the committed snapshot, applies the reusable analytical pipeline, and provides dashboard filters plus the review explorer. It does not execute the notebook or require notebook state at startup.
 
-Run locally:
+### Local setup
+
+From a fresh clone:
+
+```bash
+python --version
+python -m venv .venv
+```
+
+Activate the environment:
+
+```bash
+# Windows PowerShell
+.venv\\Scripts\\Activate.ps1
+
+# Windows Command Prompt
+.venv\\Scripts\\activate.bat
+
+# macOS/Linux
+source .venv/bin/activate
+```
+
+Install runtime dependencies:
+
+```bash
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
+
+Start the production application locally:
 
 ```bash
 streamlit run app/main.py
 ```
+
+For development and notebook work, install the extended dependency set instead:
+
+```bash
+python -m pip install -r requirements-dev.txt
+```
+
+Run the deterministic test suite:
+
+```bash
+pytest
+```
+
+Run the reference workflow with Jupyter when needed:
+
+```bash
+jupyter notebook notebooks/LMS_reviews_analysis.ipynb
+```
+
+The notebook is a reference workflow only; it is not part of the production startup path.
+
+### Reproducibility and deployment
+
+A clean runtime environment requires only Python 3.11.x and `requirements.txt`. The application starts from `app/main.py`, reads the committed dataset from `data/`, and imports the reusable `src` package directly. No Colab-specific package installation, notebook execution, or notebook state is required.
+
+For deployment, use the same Python 3.11.x runtime and install `requirements.txt`. Deployment remains manual and no GitHub Actions workflow is required.
 
 ### Performance and reliability
 
@@ -84,8 +147,6 @@ The `src` package separates:
 
 Analytical transformations are deterministic: the same normalized input and configuration produce the same derived output. The pipeline validates the derived schema after transformation so presentation code receives a predictable contract.
 
-The notebook under `notebooks/` is a reference workflow. It is not required to run the application.
-
 ## Analytical methodology
 
 ### Sentiment
@@ -117,32 +178,8 @@ These rules are configurable in the application. **Churned is not verified custo
 
 The application reports dataset row count, review coverage period, latest source review timestamp, and the UTC timestamp at which dashboard analysis was generated. Refreshing data is a separate ingestion concern and is not triggered by page loads.
 
-## Local setup
-
-```bash
-python -m venv .venv
-
-# Windows
-.venv\\Scripts\\activate
-
-# macOS/Linux
-source .venv/bin/activate
-
-pip install -r requirements.txt
-```
-
-Run the tests with:
-
-```bash
-pytest
-```
-
-Run the reference workflow with Jupyter:
-
-```bash
-jupyter notebook notebooks/LMS_reviews_analysis.ipynb
-```
-
 ## Scope
 
-Phase 7 adds cached dataset and analytical transformations, bounded review rendering, resilient pagination and optional-column handling, explicit empty/error/loading states, and deterministic reliability tests. Deployment automation is intentionally excluded; no GitHub Actions workflow is required for this project.
+The application is a production-oriented Streamlit dashboard backed by the committed curated CSV snapshot. Dataset refresh is a controlled separate workflow, while the normal application path remains deterministic and does not scrape live Google Play data.
+
+Deployment automation is intentionally excluded; no GitHub Actions workflow is required for this project.
