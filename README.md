@@ -178,6 +178,44 @@ These rules are configurable in the application. **Churned is not verified custo
 
 The application reports dataset row count, review coverage period, latest source review timestamp, and the UTC timestamp at which dashboard analysis was generated. Refreshing data is a separate ingestion concern and is not triggered by page loads.
 
+## Deployment
+
+The production target for this project is **Streamlit Community Cloud**. Deployment is intentionally manual; no GitHub Actions workflow is required.
+
+### Deployment configuration
+
+- **Repository:** `stillbrainstorming/LMS-Data-Analysis`
+- **Branch:** `main`
+- **Main file:** `app/main.py`
+- **Python:** `3.11.x` as defined by `.python-version`
+- **Dependencies:** `requirements.txt`
+- **Dataset:** `data/lms_reviews_segmented.csv`
+- **Secrets:** None required for the normal dashboard startup.
+
+### Manual Streamlit Community Cloud deployment
+
+1. Sign in to Streamlit Community Cloud with an account that can access the repository.
+2. Create a new app from `stillbrainstorming/LMS-Data-Analysis`.
+3. Select the `main` branch.
+4. Set the main file path to `app/main.py`.
+5. Deploy the app.
+6. Confirm the deployment starts successfully and that the dashboard can load the committed dataset.
+7. Verify filters, review exploration, methodology/freshness information, and the absence of any notebook or Colab dependency.
+8. Add the generated public app URL to this README after the deployment is created.
+
+### Production verification checklist
+
+- [ ] Application starts successfully from `app/main.py`.
+- [ ] `requirements.txt` installs successfully on the target runtime.
+- [ ] The committed dataset loads from `data/lms_reviews_segmented.csv`.
+- [ ] Dashboard filters update the displayed metrics and charts.
+- [ ] Review exploration works in the deployed application.
+- [ ] Methodology and dataset freshness information render correctly.
+- [ ] No notebook execution or Colab state is required.
+- [ ] Public production URL is recorded below.
+
+**Live application:** Pending manual Streamlit Community Cloud deployment.
+
 ## Scope
 
 The application is a production-oriented Streamlit dashboard backed by the committed curated CSV snapshot. Dataset refresh is a controlled separate workflow, while the normal application path remains deterministic and does not scrape live Google Play data.
