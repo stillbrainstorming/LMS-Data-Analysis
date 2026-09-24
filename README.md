@@ -229,6 +229,12 @@ jupyter notebook notebooks/LMS_reviews_analysis.ipynb
 
 The application does not require notebook execution, Colab state, or a live data source to start.
 
+Run the production preflight before deployment:
+
+```bash
+python scripts/preflight.py
+```
+
 ## Deployment
 
 The production target is **Streamlit Community Cloud**. Deployment is intentionally manual; no GitHub Actions workflow is required.
