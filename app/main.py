@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from app.review_explorer import render_review_explorer
+from app.review_explorer import clear_review_explorer_state, render_review_explorer
 from src.analysis.config import AnalysisConfig, DEFAULT_CONFIG
 from src.analysis.pain_points import pain_point_columns
 from src.data.manifest import load_metadata
@@ -154,6 +154,7 @@ with st.sidebar:
     if st.button("Reset filters", use_container_width=True):
         for key in ["rating_filter", "sentiment_filter", "segment_filter", "pain_filter", "search_filter", "date_filter"]:
             st.session_state.pop(key, None)
+        clear_review_explorer_state(st.session_state)
         st.rerun()
 
     st.subheader("Analysis configuration")

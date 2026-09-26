@@ -2,9 +2,9 @@ from pathlib import Path
 
 import pandas as pd
 
-from src.data.schema import RAW_COLUMNS, normalize_source_reviews
+from src.data.schema import REQUIRED_SOURCE_COLUMNS, normalize_source_reviews
 
-SOURCE_COLUMNS = list(RAW_COLUMNS)
+SOURCE_COLUMNS = list(REQUIRED_SOURCE_COLUMNS)
 
 
 def clean_reviews(df: pd.DataFrame) -> pd.DataFrame:

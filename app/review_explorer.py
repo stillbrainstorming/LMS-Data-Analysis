@@ -18,6 +18,23 @@ DISPLAY_COLUMNS = [
     "content",
 ]
 
+REVIEW_EXPLORER_STATE_KEYS = (
+    "explorer_search",
+    "explorer_ratings",
+    "explorer_sentiments",
+    "explorer_segments",
+    "explorer_pain_points",
+    "explorer_dates",
+    "explorer_sort",
+    "explorer_page",
+    "explorer_selected_review",
+)
+
+
+def clear_review_explorer_state(session_state) -> None:
+    for key in REVIEW_EXPLORER_STATE_KEYS:
+        session_state.pop(key, None)
+
 
 @st.cache_data(show_spinner=False)
 def add_pain_point_tags(df: pd.DataFrame, pain_points: tuple[str, ...]) -> pd.DataFrame:

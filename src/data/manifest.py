@@ -25,6 +25,7 @@ def build_metadata(
     retrieval_time = retrieved_at or utc_now()
     return {
         "schema_version": 1,
+        "status": "success",
         "source": "Google Play via google-play-scraper",
         "app_id": app_id,
         "language": lang,
