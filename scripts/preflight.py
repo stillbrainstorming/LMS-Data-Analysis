@@ -35,12 +35,22 @@ def check_dependencies() -> None:
         raise PreflightError("requirements.txt is empty")
 
 
-def check_entry_point() -> None:
-    entry_point = ROOT / "app" / "main.py"
-    try:
-        py_compile.compile(str(entry_point), doraise=True)
-    except py_compile.PyCompileError as exc:
-        raise PreflightError(f"app/main.py failed to compile: {exc.msg}") from exc
+def production_python_files() -> list[Path]:
+    roots = [ROOT / "app", ROOT / "src"]
+    return sorted(path for root in roots if root.is_dir() for path in root.rglob("*.py"))
+
+
+def check_production_source_syntax() -> None:
+    failures = []
+    for path in production_python_files():
+        try:
+            compile(path.read_text(encoding="utf-8"), str(path), "exec")
+        except (OSError, SyntaxError) as exc:
+            relative_path = path.relative_to(ROOT)
+            message = exc.msg if isinstance(exc, SyntaxError) else str(exc)
+            failures.append(f"{relative_path}: {message}")
+    if failures:
+        raise PreflightError("Production source syntax errors: " + "; ".join(failures))
 
 
 def check_dataset() -> None:
@@ -77,7 +87,7 @@ def main() -> int:
     checks = (
         ("required files", check_required_files),
         ("runtime dependencies", check_dependencies),
-        ("Streamlit entry point", check_entry_point),
+        ("production source syntax", check_production_source_syntax),
         ("dataset contract", check_dataset),
         ("dataset metadata", check_metadata),
     )
